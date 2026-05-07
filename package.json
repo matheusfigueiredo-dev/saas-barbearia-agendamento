@@ -1,0 +1,38 @@
+{
+  "name": "web",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "postbuild": "node scripts/copy-notify-pwa.cjs",
+    "preview": "vite preview",
+    "lint": "eslint --ext .ts,.tsx src"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "clsx": "^2.1.1",
+    "dayjs": "^1.11.13",
+    "jspdf": "^3.0.3",
+    "web-push": "^3.6.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@typescript-eslint/eslint-plugin": "^8.8.1",
+    "@typescript-eslint/parser": "^8.8.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9",
+    "tailwindcss": "^4",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

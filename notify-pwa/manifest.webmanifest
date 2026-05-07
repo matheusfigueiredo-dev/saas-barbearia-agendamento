@@ -1,0 +1,20 @@
+{
+  "name": "Barbearia Notificações",
+  "short_name": "Barbearia",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#111",
+  "theme_color": "#111",
+  "icons": [
+    {
+      "src": "/notify/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/notify/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

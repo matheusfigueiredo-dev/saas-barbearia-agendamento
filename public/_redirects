@@ -1,0 +1,5 @@
+# SPA fallback for React Router on Netlify
+# Keep API passthrough (only relevant if using Netlify functions)
+/api/*  /.netlify/functions/:splat  200
+# Route all other paths to index.html so /admin works on refresh
+/*      /index.html                 200
