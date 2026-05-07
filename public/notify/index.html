@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ativar Notificações | Barbearia</title>
+  <meta name="theme-color" content="#111" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif; background:#0f0f0f; color:#eee; margin:0; }
+    .wrap { max-width: 640px; margin: 32px auto; padding: 0 16px; }
+    button { background:#e50914; color:#fff; border:0; border-radius:8px; padding:14px 18px; font-size:16px; cursor:pointer; }
+    button[disabled] { opacity: .5; cursor: not-allowed; }
+    .card { background:#161616; border:1px solid #2a2a2a; border-radius:12px; padding:18px; margin-top:16px; }
+    code { background:#1e1e1e; padding:2px 6px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Ativar Notificações</h1>
+    <p>Toque abaixo para receber avisos de novos agendamentos no seu celular (nome, data e horário).</p>
+    <div class="card">
+      <p>Status: <span id="status">carregando…</span></p>
+      <button id="btn-enable" disabled>Ativar notificações</button>
+      <p id="hint"></p>
+    </div>
+    <div class="card">
+      <h3>Como funciona</h3>
+      <ul>
+        <li>Este app usa Push API + Service Worker (PWA).</li>
+        <li>Você precisa aceitar a permissão de notificações do navegador.</li>
+        <li>Quando um agendamento for criado, o servidor envia um push.</li>
+      </ul>
+    </div>
+  </div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
