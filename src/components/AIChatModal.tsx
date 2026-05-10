@@ -9,6 +9,19 @@ type ChatMessage = {
 }
 
 const SYSTEM_HINT = 'Assistente Dantas Barber'
+const FRIENDLY_ERROR_MESSAGE =
+  'Nosso assistente esta muito requisitado no momento e tomando um folego! Por favor, aguarde alguns minutos e tente novamente.'
+
+function isServiceErrorReply(reply: string) {
+  return (
+    reply.includes('GoogleGenerativeAI Error') ||
+    reply.includes('Error fetching') ||
+    reply.includes('Too Many Requests') ||
+    reply.includes('Service Unavailable') ||
+    reply.includes('QuotaFailure') ||
+    reply.includes('errorType')
+  )
+}
 
 export default function AIChatModal() {
   const [open, setOpen] = useState(false)
@@ -51,9 +64,6 @@ export default function AIChatModal() {
     setLoading(true)
     setError(null)
 
-    const friendlyErrorMessage =
-      'Nosso assistente esta muito requisitado no momento e tomando um folego! Por favor, aguarde alguns minutos e tente novamente.'
-
     try {
       const response = await fetch('/.netlify/functions/ai-agent', {
         method: 'POST',
@@ -69,14 +79,15 @@ export default function AIChatModal() {
       if (data.error) throw new Error('assistant_unavailable')
 
       const reply = (data.reply || 'Nao consegui responder agora.').trim()
+      if (isServiceErrorReply(reply)) throw new Error('assistant_unavailable')
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }])
     } catch {
-      setError(friendlyErrorMessage)
+      setError(FRIENDLY_ERROR_MESSAGE)
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: friendlyErrorMessage
+          content: FRIENDLY_ERROR_MESSAGE
         }
       ])
     } finally {
