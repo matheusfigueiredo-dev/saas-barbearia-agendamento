@@ -253,37 +253,10 @@ export const handler = async (event: { httpMethod: string; body?: string | null 
     return {
       statusCode: 200,
       headers: defaultHeaders,
-                service_ids: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-                booking_date: { type: SchemaType.STRING, description: 'Timestamp or ISO datetime.' }
+      body: JSON.stringify({ ok: true })
+    }
   }
-              required: ['client_name', 'client_phone', 'service_ids', 'booking_date']
-            }
-          },
-          {
-            name: 'request_cancellation',
-            description: 'Request cancellation for an existing booking.',
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                date: { type: SchemaType.STRING, description: 'Date in YYYY-MM-DD format.' },
-                time: { type: SchemaType.STRING, description: 'Time in HH:MM format.' },
-                client_phone: { type: SchemaType.STRING }
-              },
-              required: ['date', 'time', 'client_phone']
-            }
-          },
-          {
-            name: 'request_custom_time',
-            description: 'Request a custom time outside standard availability.',
-            parameters: {
-              type: SchemaType.OBJECT,
-              properties: {
-                client_name: { type: SchemaType.STRING },
-                client_phone: { type: SchemaType.STRING },
-                service_ids: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
-                booking_date: { type: SchemaType.STRING, description: 'Timestamp or ISO datetime.' }
-              },
-              required: ['client_name', 'client_phone', 'service_ids', 'booking_date']
+
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 200,
@@ -351,16 +324,43 @@ export const handler = async (event: { httpMethod: string; body?: string | null 
           },
           {
             name: 'create_appointment',
-            description: 'Create a booking for a client using the selected service and datetime.',
+            description: 'Create a booking for a client using the selected services and datetime.',
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
                 client_name: { type: SchemaType.STRING },
                 client_phone: { type: SchemaType.STRING },
-                service_id: { type: SchemaType.STRING },
+                service_ids: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
                 booking_date: { type: SchemaType.STRING, description: 'Timestamp or ISO datetime.' }
               },
-              required: ['client_name', 'client_phone', 'service_id', 'booking_date']
+              required: ['client_name', 'client_phone', 'service_ids', 'booking_date']
+            }
+          },
+          {
+            name: 'request_cancellation',
+            description: 'Request cancellation for an existing booking.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                date: { type: SchemaType.STRING, description: 'Date in YYYY-MM-DD format.' },
+                time: { type: SchemaType.STRING, description: 'Time in HH:MM format.' },
+                client_phone: { type: SchemaType.STRING }
+              },
+              required: ['date', 'time', 'client_phone']
+            }
+          },
+          {
+            name: 'request_custom_time',
+            description: 'Request a custom time outside standard availability.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                client_name: { type: SchemaType.STRING },
+                client_phone: { type: SchemaType.STRING },
+                service_ids: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+                booking_date: { type: SchemaType.STRING, description: 'Timestamp or ISO datetime.' }
+              },
+              required: ['client_name', 'client_phone', 'service_ids', 'booking_date']
             }
           }
         ]
