@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import { getSupabase } from './lib/supabase'
 import { getBookingColumns, getBookingSchema } from './lib/bookingsSchema'
 import { generateAdaptiveBusinessSlots } from './lib/slots'
+import AIChatModal from './components/AIChatModal'
 
 export default function App() {
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'))
@@ -1128,6 +1129,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <AIChatModal />
     </div>
   )
 }
