@@ -191,7 +191,12 @@ export const handler = async (event: { httpMethod: string; body?: string | null 
   const incomingMessages = Array.isArray(payload.messages) ? payload.messages : []
   const fallbackText = payload.message || ''
   const safeMessages = incomingMessages.length > 0 ? incomingMessages : [{ role: 'user', content: fallbackText }]
-  const lastMessage = safeMessages[safeMessages.length - 1]
+  const trimmedMessages = [...safeMessages]
+  while (trimmedMessages[0]?.role === 'assistant') {
+    trimmedMessages.shift()
+  }
+  const normalizedMessages = trimmedMessages.length > 0 ? trimmedMessages : [{ role: 'user', content: fallbackText }]
+  const lastMessage = normalizedMessages[normalizedMessages.length - 1]
 
   const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel({
@@ -239,7 +244,7 @@ export const handler = async (event: { httpMethod: string; body?: string | null 
     ]
   })
 
-  const history = safeMessages.slice(0, -1).map((message) => ({
+  const history = normalizedMessages.slice(0, -1).map((message) => ({
     role: message.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: message.content }]
   }))
