@@ -51,6 +51,9 @@ export default function AIChatModal() {
     setLoading(true)
     setError(null)
 
+    const friendlyErrorMessage =
+      'Nosso assistente esta muito requisitado no momento e tomando um folego! Por favor, aguarde alguns minutos e tente novamente.'
+
     try {
       const response = await fetch('/.netlify/functions/ai-agent', {
         method: 'POST',
@@ -59,23 +62,21 @@ export default function AIChatModal() {
       })
 
       if (!response.ok) {
-        const text = await response.text()
-        throw new Error(text || 'Falha ao conversar com o assistente.')
+        throw new Error('assistant_unavailable')
       }
 
       const data = (await response.json()) as { reply?: string; error?: string }
-      if (data.error) throw new Error(data.error)
+      if (data.error) throw new Error('assistant_unavailable')
 
       const reply = (data.reply || 'Nao consegui responder agora.').trim()
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }])
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro inesperado no assistente.'
-      setError(message)
+    } catch {
+      setError(friendlyErrorMessage)
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: 'Tive um problema ao responder. Tente novamente em instantes.'
+          content: friendlyErrorMessage
         }
       ])
     } finally {
