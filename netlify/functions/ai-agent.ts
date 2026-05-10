@@ -1,4 +1,5 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+/// <reference types="node" />
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import { createClient } from '@supabase/supabase-js'
 
 type ChatMessage = {
@@ -187,7 +188,7 @@ export default async (req: Request) => {
             name: 'get_services',
             description: 'List all services from the catalog.',
             parameters: {
-              type: 'object',
+              type: SchemaType.OBJECT,
               properties: {},
               required: []
             }
@@ -196,9 +197,9 @@ export default async (req: Request) => {
             name: 'check_availability',
             description: 'Check free slots for a given date (YYYY-MM-DD).',
             parameters: {
-              type: 'object',
+              type: SchemaType.OBJECT,
               properties: {
-                date: { type: 'string', description: 'Date in YYYY-MM-DD format.' }
+                date: { type: SchemaType.STRING, description: 'Date in YYYY-MM-DD format.' }
               },
               required: ['date']
             }
@@ -207,12 +208,12 @@ export default async (req: Request) => {
             name: 'create_appointment',
             description: 'Create a booking for a client using the selected service and datetime.',
             parameters: {
-              type: 'object',
+              type: SchemaType.OBJECT,
               properties: {
-                client_name: { type: 'string' },
-                client_phone: { type: 'string' },
-                service_id: { type: 'string' },
-                booking_date: { type: 'string', description: 'Timestamp or ISO datetime.' }
+                client_name: { type: SchemaType.STRING },
+                client_phone: { type: SchemaType.STRING },
+                service_id: { type: SchemaType.STRING },
+                booking_date: { type: SchemaType.STRING, description: 'Timestamp or ISO datetime.' }
               },
               required: ['client_name', 'client_phone', 'service_id', 'booking_date']
             }
