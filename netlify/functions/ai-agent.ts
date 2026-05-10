@@ -144,32 +144,48 @@ function extractText(parts: Array<{ text?: string }> | undefined) {
 
 export const config = { path: '/api/ai-agent' }
 
-export default async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'content-type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      }
-    })
+const defaultHeaders = {
+  'content-type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+}
+
+export const handler = async (event: { httpMethod: string; body?: string | null }) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: defaultHeaders,
+      body: JSON.stringify({ ok: true })
+    }
   }
 
-  if (req.method !== 'POST') {
-    return new Response('Method Not Allowed', { status: 405 })
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 200,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Method Not Allowed' })
+    }
   }
 
   const apiKey = process.env.VITE_GEMINI_API_KEY
   if (!apiKey) {
-    return new Response('Missing VITE_GEMINI_API_KEY', { status: 500 })
+    return {
+      statusCode: 200,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Missing VITE_GEMINI_API_KEY' })
+    }
   }
 
   let payload: { messages?: ChatMessage[]; message?: string }
   try {
-    payload = await req.json()
+    payload = event.body ? JSON.parse(event.body) : {}
   } catch {
-    return new Response('Invalid JSON', { status: 400 })
+    return {
+      statusCode: 200,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Invalid JSON' })
+    }
   }
 
   const incomingMessages = Array.isArray(payload.messages) ? payload.messages : []
@@ -253,11 +269,9 @@ export default async (req: Request) => {
 
   const reply = extractText(parts)
 
-  return new Response(JSON.stringify({ reply }), {
-    status: 200,
-    headers: {
-      'content-type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    }
-  })
+  return {
+    statusCode: 200,
+    headers: defaultHeaders,
+    body: JSON.stringify({ reply })
+  }
 }
