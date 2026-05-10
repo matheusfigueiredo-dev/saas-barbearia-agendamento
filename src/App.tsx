@@ -1129,7 +1129,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <AIChatModal />
+      {showAdminLink && <AIChatModal />}
     </div>
   )
 }
