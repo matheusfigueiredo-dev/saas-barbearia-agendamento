@@ -7,6 +7,7 @@ import { getBookingColumns, getBookingSchema } from './lib/bookingsSchema'
 import { generateAdaptiveBusinessSlots } from './lib/slots'
 import { BarberSelectionStep } from './components/BarberSelectionStep'
 import { useBarberSelection } from './context/BarberContext'
+import AIChatModal from './components/AIChatModal'
 
 export default function App() {
   const { selectedBarberId, setSelectedBarberId, selectedBarber, barbers } = useBarberSelection()
@@ -1220,6 +1221,7 @@ export default function App() {
           </div>
         </div>
       )}
+      {showAdminLink && <AIChatModal />}
     </div>
   )
 }

@@ -11,6 +11,8 @@
     "lint": "eslint --ext .ts,.tsx src"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@netlify/functions": "^5.2.0",
     "@supabase/supabase-js": "^2.57.4",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.13",
