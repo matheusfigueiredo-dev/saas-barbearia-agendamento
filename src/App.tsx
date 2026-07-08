@@ -947,9 +947,8 @@ export default function App() {
       )}
       <div className="max-w-3xl mx-auto px-4 py-10">
         <header className="mb-8 flex flex-col items-center gap-3">
-          <img src="https://i.imgur.com/rwsw9r0.png" alt="Logotipo da Barbearia" width={152} height={152} style={{ height: 'auto', width: 'auto', marginTop: '-40px' }} />
-          <h1 className="text-3xl -mt-15 font-bold text-center">Dantas Barber Shop</h1>
-          <p className="text-neutral-400 text-center">Escolha o profissional, selecione a data, confirme um horário disponível e finalize seu agendamento.</p>
+          <img src="https://i.imgur.com/rwsw9r0.png" alt="Logotipo da Barbearia" width={152} height={152} style={{ height: 'auto', width: 'auto', marginTop: '-45px' }} />
+          <p className="text-neutral-400 -mt-22 text-center">Escolha o profissional, selecione a data, confirme um horário disponível e finalize seu agendamento.</p>
           <button onClick={() => { const n = secretClicks + 1; setSecretClicks(n); if (n >= 5) setShowAdminLink(true); }} className="text-[10px] text-neutral-600 hover:text-neutral-400" aria-label="hidden-admin">·</button>
           {showAdminLink && (<a href="/admin" className="text-xs text-emerald-400 hover:underline">Entrar como barbeiro</a>)}
         </header>
