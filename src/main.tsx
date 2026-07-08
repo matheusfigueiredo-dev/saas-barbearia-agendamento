@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import App from './App'
 import Admin from './routes/Admin'
+import { BarberSelectionProvider } from './context/BarberContext'
 import './index.css'
 
 const router = createBrowserRouter([
@@ -12,6 +13,8 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <RouterProvider router={router} future={{ v7_startTransition: true }} />
+    <BarberSelectionProvider>
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
+    </BarberSelectionProvider>
   </React.StrictMode>,
 )

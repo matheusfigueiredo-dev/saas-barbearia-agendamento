@@ -9,92 +9,26 @@ Siga estes passos no painel do Supabase para substituir o Firebase:
   - NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 2) Crie as tabelas e políticas (SQL)
-- No menu SQL, execute o script abaixo para criar tabelas, índices e RLS.
-
-```sql
--- Tabela de serviços
-create table if not exists public.services_catalog (
-  id bigserial primary key,
-  title text not null,
-  price numeric(10,2) not null default 0,
-  minutes integer not null default 0,
-  image text null,
-  created_at timestamptz not null default now()
-);
-
--- Tabela de agendamentos
-create table if not exists public.bookings (
-  id bigserial primary key,
-  date date not null,
-  time text not null check (time ~ '^[0-2][0-9]:[0-5][0-9]$'),
-  name text not null,
-  phone text null,
-  service text null,
-  price numeric(10,2) null,
-  duration_minutes integer null,
-  created_at timestamptz not null default now(),
-  constraint bookings_unique_slot unique (date, time)
-);
-
--- Tabela de configurações/flags simples
-create table if not exists public.settings (
-  key text primary key,
-  value jsonb not null,
-  updated_at timestamptz not null default now()
-);
-
--- Habilitar RLS
-alter table public.services_catalog enable row level security;
-alter table public.bookings enable row level security;
-alter table public.settings enable row level security;
-
--- Políticas básicas
--- Público (anon) pode: listar serviços, listar/assinar bookings do dia e criar um booking
-create policy "public read services" on public.services_catalog
-  for select
-  using (true);
-
-create policy "public read bookings" on public.bookings
-  for select
-  using (true);
-
-create policy "public insert bookings" on public.bookings
-  for insert
-  with check (true);
-
--- Somente usuários logados (barbeiro) podem alterar/excluir serviços e bookings
-create policy "auth manage services" on public.services_catalog
-  for all
-  to authenticated
-  using (true)
-  with check (true);
-
-create policy "auth manage bookings" on public.bookings
-  for delete
-  to authenticated
-  using (true);
-
--- settings: somente autenticado pode ler/escrever
-create policy "auth manage settings" on public.settings
-  for all
-  to authenticated
-  using (true)
-  with check (true);
-
--- Realtime: habilite public.bookings e public.services_catalog em Replication → Realtime
-```
+- No menu SQL, execute [scripts/supabase-multi-tenant.sql](scripts/supabase-multi-tenant.sql).
+- Antes de rodar, substitua os placeholders `<LUCAS_AUTH_UID>` e `<VICTOR_AUTH_UID>` pelos UUIDs reais do Supabase Auth.
+- O app do cliente também pode ler `VITE_LUCAS_BARBER_ID` e `VITE_VICTOR_BARBER_ID` como fallback, caso você prefira configurar por ambiente.
+- O script já clona automaticamente o catálogo de serviços do Lucas para o Victor, mantendo cada barbeiro com seu próprio conjunto editável no painel.
 
 3) Ative Realtime
 - Em Realtime, habilite as tabelas `public.bookings` e `public.services_catalog`.
 
 4) Autenticação (barbeiro)
 - Em Authentication → Providers, mantenha Email habilitado.
-- Crie um usuário pela aba Users (email/senha) para o barbeiro.
+- Garanta que os dois usuários existentes no Auth estejam vinculados às linhas da tabela `barbers`.
 
 5) Variáveis no Netlify
 - No site do Netlify → Site settings → Environment variables, adicione:
   - NEXT_PUBLIC_SUPABASE_URL = (URL do projeto)
   - NEXT_PUBLIC_SUPABASE_ANON_KEY = (anon key)
+  - VITE_LUCAS_BARBER_ID = (UUID auth do Lucas)
+  - VITE_VICTOR_BARBER_ID = (UUID auth do Victor)
+  - VITE_LUCAS_BARBER_PHOTO = (opcional)
+  - VITE_VICTOR_BARBER_PHOTO = (opcional)
 - Faça um novo deploy.
 
 6) Migração de dados (opcional)

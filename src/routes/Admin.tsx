@@ -30,6 +30,7 @@ export default function Admin() {
   // Auth state
   const [authReady, setAuthReady] = useState(false)
   const [isAuthed, setIsAuthed] = useState(false)
+  const [barberId, setBarberId] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState<boolean>(() => {
@@ -43,10 +44,17 @@ export default function Admin() {
 
   useEffect(() => {
     const s = getSupabase()
-    s.auth.getSession().then(({ data }) => { setIsAuthed(!!data.session); setAuthReady(true) })
-    const { data: sub } = s.auth.onAuthStateChange((_event, session) => { setIsAuthed(!!session) })
+    s.auth.getSession().then(({ data }) => {
+      setIsAuthed(!!data.session)
+      setBarberId(data.session?.user.id ?? null)
+      setAuthReady(true)
+    })
+    const { data: sub } = s.auth.onAuthStateChange((_event, session) => {
+      setIsAuthed(!!session)
+      setBarberId(session?.user.id ?? null)
+    })
     return () => { sub.subscription.unsubscribe() }
-  }, [])
+  }, [barberId])
 
   useEffect(() => {
     if (!authReady) return
@@ -98,7 +106,7 @@ export default function Admin() {
   // Carregamento de Financeiro (30 dias) e assinatura realtime
   const loadFinance = React.useCallback(async () => {
     try {
-      if (!isAuthed) return
+      if (!isAuthed || !barberId) return
       const s = getSupabase()
       const cols = await getBookingColumns(s)
       // Usa intervalo atual selecionado
@@ -116,25 +124,26 @@ export default function Admin() {
         .select(selectCols)
         .gte(cols.dateCol, start)
         .lte(cols.dateCol, end)
+        .eq('barber_id', barberId)
       const mapped = ((data as any[])||[]).map(d => ({
         id: String(d.id), date: d[cols.dateCol], time: d[cols.timeCol], name: d.name, phone: d.phone, service: d.service, price: d.price, durationMinutes: d.duration_minutes, _raw: d
       })) as Booking[]
       setFinanceBookings(mapped)
     } catch {}
-  }, [isAuthed, financeStart, financeEnd])
+  }, [isAuthed, barberId, financeStart, financeEnd])
 
   useEffect(() => { void loadFinance() }, [loadFinance])
 
   useEffect(() => {
-    if (!isAuthed) return
+    if (!isAuthed || !barberId) return
     let active = true
     const s = getSupabase()
     const ch = s
-      .channel('finance-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => { if (!active) return; void loadFinance() })
+      .channel(`finance-realtime-${barberId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barber_id=eq.${barberId}` }, () => { if (!active) return; void loadFinance() })
       .subscribe()
     return () => { active = false; getSupabase().removeChannel(ch) }
-  }, [isAuthed, loadFinance])
+  }, [isAuthed, barberId, loadFinance])
 
   // Quick presets helpers
   function applyPreset(p: Preset) {
@@ -240,14 +249,14 @@ export default function Admin() {
         {activeTab==='bookings' && (
           <section className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 overflow-hidden">
             <h2 className="text-lg font-semibold mb-3">Agendamentos do período</h2>
-            <BookingsPanel onInitialHydrated={handlePanelHydrated} />
+            <BookingsPanel barberId={barberId} onInitialHydrated={handlePanelHydrated} />
           </section>
         )}
 
         {activeTab==='services' && (
           <section className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 overflow-hidden">
             <h2 className="text-lg font-semibold mb-3">Serviços</h2>
-            <ServicesPanel />
+            <ServicesPanel barberId={barberId} />
           </section>
         )}
 
@@ -290,7 +299,7 @@ export default function Admin() {
   )
 }
 
-function ServicesPanel() {
+function ServicesPanel({ barberId }: { barberId: string | null }) {
   const [items, setItems] = useState<Service[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Service>({ title: '', price: 0, minutes: 0, image: '' })
@@ -300,12 +309,13 @@ function ServicesPanel() {
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const { data, error } = await getSupabase().from('services_catalog').select('*').order('title', { ascending: true })
+    if (!barberId) return
+    const { data, error } = await getSupabase().from('services_catalog').select('*').eq('barber_id', barberId).order('title', { ascending: true })
     if (!error) {
       const list = ((data as any[]) || []).map(d => ({ id: d.id, title: d.title, price: d.price, minutes: d.minutes, image: d.image || null }))
       setItems(list)
     }
-  }, [])
+  }, [barberId])
 
   useEffect(() => { void load() }, [load])
 
@@ -346,11 +356,12 @@ function ServicesPanel() {
     setSaving(true)
     try {
       const supa = getSupabase()
+      if (!barberId) throw new Error('Barbeiro autenticado não encontrado.')
       if (editingId) {
-        const { error } = await supa.from('services_catalog').update({ title: form.title, price: form.price, minutes: form.minutes, image: form.image || null }).eq('id', editingId)
+        const { error } = await supa.from('services_catalog').update({ title: form.title, price: form.price, minutes: form.minutes, image: form.image || null }).eq('id', editingId).eq('barber_id', barberId)
         if (error) throw error
       } else {
-        const { error } = await supa.from('services_catalog').insert({ title: form.title, price: form.price, minutes: form.minutes, image: form.image || null })
+        const { error } = await supa.from('services_catalog').insert({ title: form.title, price: form.price, minutes: form.minutes, image: form.image || null, barber_id: barberId })
         if (error) throw error
       }
       setForm({ title: '', price: 0, minutes: 0, image: '' })
@@ -364,7 +375,8 @@ function ServicesPanel() {
   async function remove(id?: string) {
     if (!id) return
     if (!confirm('Excluir este serviço?')) return
-    const { error } = await getSupabase().from('services_catalog').delete().eq('id', id)
+    if (!barberId) return
+    const { error } = await getSupabase().from('services_catalog').delete().eq('id', id).eq('barber_id', barberId)
     if (!error) await load()
   }
 
@@ -738,7 +750,7 @@ function extractServiceNamesFromRecord(rec: any, booking: any, schema: any, serv
   return []
 }
 
-function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void } = {}) {
+function BookingsPanel({ barberId, onInitialHydrated }: { barberId: string | null; onInitialHydrated?: () => void } = { barberId: null }) {
   // Intervalo de datas: inicial e final (default: hoje)
   const [startDate, setStartDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
@@ -820,6 +832,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
   // Carrega agendamentos globais (todas as datas) somente para notificação
   const loadNotificationsAll = useCallback(async () => {
     try {
+      if (!barberId) return
       const supa = getSupabase()
       const cols = await getBookingColumns(supa)
       const sch = await getBookingSchema(supa)
@@ -827,6 +840,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
       const trySelect = async (sel: string) => (
         await (supa.from('bookings') as any)
           .select(sel)
+          .eq('barber_id', barberId)
           .order(cols.dateCol, { ascending: false })
           .order(cols.timeCol, { ascending: false })
           .limit(300)
@@ -846,7 +860,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
       const mapped = (data || []).map(d => ({ id: String(d.id), date: d[cols.dateCol], time: d[cols.timeCol], name: d.name, _raw: d })) as Booking[]
       setNotifItems(mapped)
     } catch {}
-  }, [])
+  }, [barberId])
 
   // Inicializa notificações globais e assina realtime separado
   useEffect(() => { void loadNotificationsAll() }, [loadNotificationsAll])
@@ -854,19 +868,20 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
     let active = true
     const supa = getSupabase()
     const ch = supa
-      .channel('notifications-all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => { if (!active) return; void loadNotificationsAll() })
+      .channel(`notifications-all-${barberId ?? 'none'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: barberId ? `barber_id=eq.${barberId}` : 'barber_id=eq.__none__' }, () => { if (!active) return; void loadNotificationsAll() })
       .subscribe()
     return () => { active = false; getSupabase().removeChannel(ch) }
-  }, [loadNotificationsAll])
+  }, [barberId, loadNotificationsAll])
 
   useEffect(() => {
     (async () => {
       try {
+        if (!barberId) return
         const supa = getSupabase()
         const map: Record<string,string> = {}
         // Carrega catálogo oficial
-        const { data, error } = await supa.from('services_catalog').select('id, title, price, minutes')
+        const { data, error } = await supa.from('services_catalog').select('id, title, price, minutes').eq('barber_id', barberId)
         if (!error && Array.isArray(data)) {
           for (const row of data as any[]) {
             const name = String(row?.title ?? '').trim()
@@ -878,7 +893,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
         setServiceCatalog(map)
       } catch {}
     })()
-  }, [])
+  }, [barberId])
 
   // Wrapper para manter assinatura anterior dentro do componente
   const getServiceNames = (rec: any, booking?: Booking) => extractServiceNamesFromRecord(rec, booking, schema, serviceCatalog)
@@ -938,6 +953,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
   // Abre modal de detalhes a partir de uma notificação (busca registro completo por ID)
   async function openNotification(b: Booking) {
     try {
+      if (!barberId) return
       const supa = getSupabase()
       const cols = await getBookingColumns(supa)
       const sch = await getBookingSchema(supa)
@@ -948,12 +964,14 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
         const { data: d1, error: e1 } = await (supa.from('bookings') as any)
           .select(selectBase + ', created_at')
           .eq('id', b.id)
+          .eq('barber_id', barberId)
           .limit(1)
         if (!e1 && Array.isArray(d1) && d1[0]) row = d1[0]
         else {
           const { data: d2, error: e2 } = await (supa.from('bookings') as any)
             .select(selectBase)
             .eq('id', b.id)
+            .eq('barber_id', barberId)
             .limit(1)
           if (e2) throw e2
           row = Array.isArray(d2) && d2[0] ? d2[0] : null
@@ -1036,6 +1054,16 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
     setLoading(true)
     setErr(null)
     try {
+      if (!barberId) {
+        setItems([])
+        setEstimated(0)
+        setCompletedTotal(0)
+        setPendingCount(0)
+        setDoneCount(0)
+        setAgendarCount(0)
+        setCancelarCount(0)
+        return
+      }
       const supa = getSupabase()
       const cols = await getBookingColumns(supa)
       const sch = await getBookingSchema(supa)
@@ -1048,6 +1076,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
         .select(`id, ${cols.dateCol}, ${cols.timeCol}, name, phone, service, price, duration_minutes${sch.statusKind==='text' && sch.statusCol ? `, ${sch.statusCol}` : ''}${sch.statusKind==='boolean' && sch.isCompletedCol ? `, ${sch.isCompletedCol}` : ''}${sch.completedAtCol ? `, ${sch.completedAtCol}` : ''}${sch.servicesJsonCol ? `, ${sch.servicesJsonCol}` : ''}${(sch as any).servicesCol ? `, ${(sch as any).servicesCol}` : ''}`)
         .gte(cols.dateCol, from)
         .lte(cols.dateCol, to)
+        .eq('barber_id', barberId)
       if (error) throw error
       const mapped = ((data as any[]) || []).map(d => ({
         id: String(d.id),
@@ -1108,7 +1137,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
       setLoading(false)
       signalHydrated()
     }
-  }, [startDate, endDate, signalHydrated])
+  }, [startDate, endDate, barberId, signalHydrated])
 
   useEffect(() => { void load() }, [load])
 
@@ -1116,20 +1145,20 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
     let active = true
     const supa = getSupabase()
     const ch = supa
-      .channel(`range-${startDate}-${endDate}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+      .channel(`range-${startDate}-${endDate}-${barberId ?? 'none'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: barberId ? `barber_id=eq.${barberId}` : 'barber_id=eq.__none__' }, () => {
         if (!active) return
         void load()
       })
       .subscribe()
     return () => { active = false; getSupabase().removeChannel(ch) }
-  }, [startDate, endDate, load])
+  }, [startDate, endDate, barberId, load])
 
   async function cancel(id: string) {
     if (!confirm('Cancelar este agendamento?')) return
     try {
       setActingId(id)
-      const { error } = await getSupabase().from('bookings').delete().eq('id', id)
+      const { error } = await getSupabase().from('bookings').delete().eq('id', id).eq('barber_id', barberId ?? '')
       if (error) {
         alert('Falha ao excluir: ' + (error.message || 'erro desconhecido'))
         return
@@ -1160,6 +1189,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
         .from('bookings')
         .update(update)
         .eq('id', id)
+        .eq('barber_id', barberId ?? '')
         .select('id')
         .limit(1)
       if (error) { alert('Falha ao concluir: ' + (error.message || 'erro desconhecido')); return }
@@ -1380,7 +1410,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
                           setActingId(b.id);
                           const field = schema.statusCol as string;
                           const update:any = {}; update[field] = null;
-                          await getSupabase().from('bookings').update(update).eq('id', b.id);
+                          await getSupabase().from('bookings').update(update).eq('id', b.id).eq('barber_id', barberId ?? '');
                           setActingId(null);
                           void load();
                         }}
@@ -1484,11 +1514,11 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
                             const supa = getSupabase()
                             if (schema.statusKind==='text' && schema.statusCol) {
                               const update:any = {}; update[schema.statusCol] = null
-                              await supa.from('bookings').update(update).eq('id', selected.id)
+                              await supa.from('bookings').update(update).eq('id', selected.id).eq('barber_id', barberId ?? '')
                             } else {
                               const cur = String((selected as any).service||'')
                               const next = cur.replace(/^\s*CANCELAR\s*:\s*/i, '')
-                              await supa.from('bookings').update({ service: next }).eq('id', selected.id)
+                              await supa.from('bookings').update({ service: next }).eq('id', selected.id).eq('barber_id', barberId ?? '')
                             }
                             setSelected(null)
                             void load()
@@ -1530,7 +1560,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
                               const nextService = current.replace(/^\s*AGENDAR\s*:\s*/i, '')
                               update['service'] = nextService
                             }
-                            const { error } = await supa.from('bookings').update(update).eq('id', selected.id)
+                            const { error } = await supa.from('bookings').update(update).eq('id', selected.id).eq('barber_id', barberId ?? '')
                             if (error) { alert('Falha ao atualizar: ' + (error.message || 'erro desconhecido')); return }
                             setSelected(null)
                             void load()
@@ -1616,7 +1646,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
                     }
                     const toHHmm = (m:number) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
                     const pickAvailableEODTime = async (targetDate:string): Promise<string> => {
-                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate)
+                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate).eq('barber_id', barberId ?? '')
                       const used = new Set<number>((data||[]).map((r:any)=> toMinutes(r[cols.timeCol])))
                       // Tenta do 23:59 descendo até 20:00 (ou mais, se necessário)
                       for (let m=23*60+59; m>=0; m--) {
@@ -1629,7 +1659,7 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
                     const titles = sel.map(s=> s.title)
                     const price = sel.reduce((a,s)=> a + (s.price||0), 0)
                     const minutes = sel.reduce((a,s)=> a + (s.minutes||0), 0)
-                    const payload:any = { name: avulsoName.trim(), phone: null, service: `AVULSO: ${titles.join(', ')}`, price, duration_minutes: minutes }
+                    const payload:any = { name: avulsoName.trim(), phone: null, service: `AVULSO: ${titles.join(', ')}`, price, duration_minutes: minutes, barber_id: barberId }
                     payload[cols.dateCol] = avulsoDate
                     // horário EOD único para evitar violação de chave única
                     payload[cols.timeCol] = await pickAvailableEODTime(avulsoDate)
@@ -1715,12 +1745,12 @@ function BookingsPanel({ onInitialHydrated }: { onInitialHydrated?: () => void }
                     const sch = await getBookingSchema(supa)
                     // Tenta o horário exato do início, se conflitar escolhe o próximo minuto disponível dentro do intervalo
                     const pickAvailableInRange = async (targetDate:string, fromMin:number, toMin:number): Promise<string | null> => {
-                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate)
+                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate).eq('barber_id', barberId ?? '')
                       const used = new Set<number>((data||[]).map((r:any)=> toMinutes(r[cols.timeCol])))
                       for (let m=fromMin; m<toMin; m++) { if (!used.has(m)) return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}` }
                       return null
                     }
-                    const payload:any = { name: 'Bloqueio', phone: null, service: `BLOQUEIO: ${startStr}–${endStr}`, price: 0, duration_minutes: duration }
+                    const payload:any = { name: 'Bloqueio', phone: null, service: `BLOQUEIO: ${startStr}–${endStr}`, price: 0, duration_minutes: duration, barber_id: barberId }
                     payload[cols.dateCol] = blockDate
                     payload[cols.timeCol] = startStr
                     if (sch.statusKind==='text' && sch.statusCol) payload[sch.statusCol] = 'bloqueado'

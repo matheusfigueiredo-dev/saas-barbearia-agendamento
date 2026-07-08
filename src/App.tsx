@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 // Import do jsPDF é feito dinamicamente dentro de generatePdfReceipt para evitar peso inicial e problemas de cache.
 import dayjs from 'dayjs'
 import clsx from 'clsx'
 import { getSupabase } from './lib/supabase'
 import { getBookingColumns, getBookingSchema } from './lib/bookingsSchema'
 import { generateAdaptiveBusinessSlots } from './lib/slots'
+import { BarberSelectionStep } from './components/BarberSelectionStep'
+import { useBarberSelection } from './context/BarberContext'
 
 export default function App() {
+  const { selectedBarberId, setSelectedBarberId, selectedBarber, barbers } = useBarberSelection()
   const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'))
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -45,6 +48,9 @@ export default function App() {
   const [cancelTime, setCancelTime] = useState<string>('')
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelMessage, setCancelMessage] = useState<string | null>(null)
+  const dateFieldRef = useRef<HTMLDivElement | null>(null)
+  const dateInputRef = useRef<HTMLInputElement | null>(null)
+  const shouldJumpToDateRef = useRef(false)
 
   // Atualiza o relógio a cada 30s para recalcular disponibilidade de horários do "dia de hoje"
   useEffect(() => {
@@ -92,6 +98,7 @@ export default function App() {
         .from('bookings')
         .select(selectCols.join(', '))
         .eq(cols.dateCol, d)
+        .eq('barber_id', selectedBarberId)
       if (!active) return
       if (error) {
         setBusyTimes([])
@@ -120,7 +127,7 @@ export default function App() {
     let colsPromise = getBookingColumns(supa)
     const channel = supa
       .channel(`bookings-day-${d}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, async (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings', filter: `barber_id=eq.${selectedBarberId}` }, async (payload) => {
         const cols = await colsPromise
         const newD = d
         // Recarrega somente se for o mesmo dia
@@ -129,16 +136,28 @@ export default function App() {
       })
       .subscribe()
     return () => { active = false; getSupabase().removeChannel(channel) }
-  }, [date])
+  }, [date, selectedBarberId])
+
+  useEffect(() => {
+    if (!shouldJumpToDateRef.current) return
+    shouldJumpToDateRef.current = false
+    const frame = window.requestAnimationFrame(() => {
+      dateFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      window.setTimeout(() => {
+        dateInputRef.current?.focus({ preventScroll: true })
+      }, 180)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [selectedBarberId])
 
   useEffect(() => {
     let active = true
     async function loadServices() {
-      const { data, error } = await getSupabase().from('services_catalog').select('id, title, price, minutes, image').order('title', { ascending: true })
+      const { data, error } = await getSupabase().from('services_catalog').select('id, title, price, minutes, image, barber_id').eq('barber_id', selectedBarberId).order('title', { ascending: true })
       if (!active) return
       if (error) setServicesError(error.message || 'Falha ao carregar serviços')
       else {
-        type SvcRow = { id: string | number; title: string; price: number; minutes: number; image: string | null }
+        type SvcRow = { id: string | number; title: string; price: number; minutes: number; image: string | null; barber_id?: string | null }
         const arr: Service[] = ((data as SvcRow[]) || []).map((d) => ({ id: String(d.id), title: d.title, price: Number(d.price ?? 0), minutes: Number(d.minutes ?? 0), image: d.image ?? null }))
   setServices(arr)
   if (servicesError) setServicesError(null)
@@ -148,9 +167,16 @@ export default function App() {
       setServicesReady(true)
     }
     loadServices()
-    const channel = getSupabase().channel('services_catalog').on('postgres_changes', { event: '*', schema: 'public', table: 'services_catalog' }, () => void loadServices()).subscribe()
+    const channel = getSupabase().channel('services_catalog').on('postgres_changes', { event: '*', schema: 'public', table: 'services_catalog', filter: `barber_id=eq.${selectedBarberId}` }, () => void loadServices()).subscribe()
     return () => { active = false; getSupabase().removeChannel(channel) }
-  }, [servicesError])
+  }, [servicesError, selectedBarberId])
+
+  useEffect(() => {
+    setSelectedServiceIds([])
+    setSelectedTime(null)
+    setIsCustomTime(false)
+    setMessage(null)
+  }, [selectedBarberId])
 
   // Auto-esconde notificações após 3s (exceto erro e sucesso, que usam diálogo central)
   useEffect(() => {
@@ -630,7 +656,7 @@ export default function App() {
   const serviceTitles = selectedServices.map(s => s.title)
   // Armazena os nomes dos serviços diretamente (separados por vírgula) para exibição fiel no Admin
   let summary = serviceTitles.join(', ')
-      const payload: any = { name: name.trim(), phone: phone.trim() || null, service: summary, price: totalPrice, duration_minutes: totalMinutes }
+  const payload: any = { name: name.trim(), phone: phone.trim() || null, service: summary, price: totalPrice, duration_minutes: totalMinutes, barber_id: selectedBarberId }
       payload[cols.dateCol] = d
       payload[cols.timeCol] = selectedTime
       if (isCustomTime) {
@@ -688,7 +714,7 @@ export default function App() {
       const selectCols = ['id', 'service']
       if (sch.statusKind === 'text' && sch.statusCol) selectCols.push(sch.statusCol)
       if (sch.servicesJsonCol) selectCols.push(sch.servicesJsonCol)
-      const response = await supa.from('bookings').select(selectCols.join(', ')).eq(cols.dateCol, dateNorm).eq(cols.timeCol, timeNorm).limit(1)
+      const response = await supa.from('bookings').select(selectCols.join(', ')).eq(cols.dateCol, dateNorm).eq(cols.timeCol, timeNorm).eq('barber_id', selectedBarberId).limit(1)
       if (response.error) throw new Error('Erro ao consultar o agendamento. Tente novamente.')
       const booking = (response.data && response.data[0]) ? (response.data[0] as any) : null
       if (!booking) {
@@ -721,7 +747,7 @@ export default function App() {
       if (sch.statusKind === 'text' && sch.statusCol) {
         update[sch.statusCol] = 'cancelar'
       }
-      const { error: updateErr } = await supa.from('bookings').update(update).eq('id', booking.id)
+      const { error: updateErr } = await supa.from('bookings').update(update).eq('id', booking.id).eq('barber_id', selectedBarberId)
       if (updateErr) throw new Error('Não foi possível registrar a solicitação. Tente novamente em instantes.')
       setCancelOpen(false)
       setCancelDate('')
@@ -922,15 +948,27 @@ export default function App() {
         <header className="mb-8 flex flex-col items-center gap-3">
           <img src="https://i.imgur.com/QYGCLfE.png" alt="Logotipo da Barbearia" width={152} height={152} style={{ height: 'auto', width: 'auto' }} />
           <h1 className="text-3xl font-bold text-center">Dantas Barber Shop</h1>
-          <p className="text-neutral-400 text-center">Escolha a data, selecione um horário disponível e confirme seu agendamento.</p>
+          <p className="text-neutral-400 text-center">Escolha o profissional, selecione a data, confirme um horário disponível e finalize seu agendamento.</p>
           <button onClick={() => { const n = secretClicks + 1; setSecretClicks(n); if (n >= 5) setShowAdminLink(true); }} className="text-[10px] text-neutral-600 hover:text-neutral-400" aria-label="hidden-admin">·</button>
           {showAdminLink && (<a href="/admin" className="text-xs text-emerald-400 hover:underline">Entrar como barbeiro</a>)}
         </header>
 
+        <div className="mb-6">
+          <BarberSelectionStep
+            barbers={barbers}
+            selectedBarberId={selectedBarberId}
+            onSelect={(barber) => {
+              shouldJumpToDateRef.current = true
+              setSelectedBarberId(barber.id)
+            }}
+          />
+        </div>
+
         <section className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-4">
+          <div ref={dateFieldRef} className="space-y-4 scroll-mt-6">
             <label className="block text-sm text-neutral-300">Data</label>
             <input
+              ref={dateInputRef}
               type="date"
               className="bg-neutral-900 border border-neutral-800 rounded px-3 py-2 w-full"
               value={date}
@@ -1082,23 +1120,77 @@ export default function App() {
       </div>
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-neutral-900 p-6 shadow-xl">
-            <h3 className="text-xl font-semibold mb-2">Confirmar agendamento</h3>
-            <p className="text-neutral-300 mb-4">
-              {selectedServices.length>0 && (
-                <>
-                  <span className="block font-medium text-white">{selectedServices.length} serviço{selectedServices.length>1?'s':''} selecionado{selectedServices.length>1?'s':''}</span>
-                  <ul className="mt-2 mb-2 list-disc list-inside text-sm text-neutral-300">
-                    {selectedServices.map(s => (<li key={s.id}>{s.title} • {s.minutes} min • R$ {s.price.toFixed(2)}</li>))}
-                  </ul>
-                  <span className="block text-sm text-neutral-400">Total: {totalMinutes} min • R$ {totalPrice.toFixed(2)}</span>
-                </>
-              )}
-              <span className="block mt-2">Deseja confirmar seu agendamento para {dayjs(date).format('DD/MM/YYYY')} às {selectedTime}?</span>
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmOpen(false)} className="px-4 py-2 rounded border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-white">Não</button>
-              <button onClick={async () => { await book(); setConfirmOpen(false) }} disabled={loading} className="px-4 py-2 rounded bg-emerald-500 hover:bg-emerald-600 text-black font-semibold disabled:opacity-50">Sim</button>
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl shadow-black/40">
+            <div className="h-1 bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-500" />
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <h3 className="text-xl font-semibold text-white">Confirmar agendamento</h3>
+                  <p className="mt-1 text-sm text-neutral-400">Revise os detalhes antes de finalizar.</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                {selectedServices.length > 0 && (
+                  <section className="rounded-xl border border-neutral-800 bg-neutral-900/80 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs uppercase tracking-[0.28em] text-emerald-300/80">Serviços</span>
+                      <span className="rounded-full border border-neutral-700 bg-neutral-950/70 px-2.5 py-1 text-[11px] uppercase tracking-[0.22em] text-neutral-400">
+                        {selectedServices.length} selecionado{selectedServices.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <ul className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1 text-sm text-neutral-200">
+                      {selectedServices.map((s) => (
+                        <li key={s.id} className="rounded-lg border border-neutral-800 bg-neutral-950/80 px-3 py-2.5 shadow-sm shadow-black/10">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <span className="block truncate font-medium leading-tight text-white">{s.title}</span>
+                              <span className="mt-0.5 block text-[11px] uppercase tracking-[0.24em] text-neutral-400">Serviço selecionado</span>
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end text-right">
+                              <span className="text-[11px] uppercase tracking-[0.24em] text-neutral-400">{s.minutes} min</span>
+                              <span className="mt-1 text-sm font-semibold text-emerald-300">R$ {s.price.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-center text-sm">
+                      <div className="rounded-md border border-emerald-400/15 bg-black/10 px-2 py-2">
+                        <span className="block text-[11px] uppercase tracking-[0.24em] text-emerald-200/90">Tempo total</span>
+                        <span className="mt-1 block text-base font-semibold text-white">{totalMinutes} min</span>
+                      </div>
+                      <div className="rounded-md border border-emerald-400/15 bg-black/10 px-2 py-2">
+                        <span className="block text-[11px] uppercase tracking-[0.24em] text-emerald-200/90">Valor total</span>
+                        <span className="mt-1 block text-base font-semibold text-white">R$ {totalPrice.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                <section className="rounded-xl border border-neutral-800 bg-neutral-900/80 p-4">
+                  <span className="block text-xs uppercase tracking-[0.28em] text-neutral-400">Barbeiro selecionado</span>
+                  <strong className="mt-1 block text-base text-white">{selectedBarber?.displayName || 'Profissional selecionado'}</strong>
+                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-neutral-800 bg-neutral-950/80 px-3 py-3 text-sm text-neutral-200">
+                    <div>
+                      <span className="block text-[11px] uppercase tracking-[0.24em] text-neutral-500">Data</span>
+                      <span className="mt-1 block font-medium text-white">{dayjs(date).format('DD/MM/YYYY')}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[11px] uppercase tracking-[0.24em] text-neutral-500">Horário</span>
+                      <span className="mt-1 block font-medium text-white">{selectedTime}</span>
+                    </div>
+                    <p className="col-span-2 pt-1 text-center text-xs text-neutral-400">
+                      Deseja confirmar este agendamento?
+                    </p>
+                  </div>
+                </section>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2">
+                <button onClick={() => setConfirmOpen(false)} className="px-4 py-2 rounded-lg border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-white transition">Não</button>
+                <button onClick={async () => { await book(); setConfirmOpen(false) }} disabled={loading} className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-black font-semibold disabled:opacity-50 transition">Sim</button>
+              </div>
             </div>
           </div>
         </div>
