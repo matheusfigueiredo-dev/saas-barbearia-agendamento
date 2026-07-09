@@ -393,7 +393,7 @@ export default function App() {
   const { slots, restrictedMicroSlots } = useMemo(() => {
     // Usa as durações reais quando disponíveis
     const occupied = busyBookings.length > 0 ? busyBookings : busyTimes.map((t) => ({ time: t, durationMinutes: 30 }))
-    const base = generateAdaptiveBusinessSlots(date, occupied, 30)
+    const base = generateAdaptiveBusinessSlots(date, occupied, 30, selectedBarber?.displayName || selectedBarberId)
     const set = new Set<string>([...base, ...busyTimes].map(toHHmm))
     const microLimited = new Set<string>()
 

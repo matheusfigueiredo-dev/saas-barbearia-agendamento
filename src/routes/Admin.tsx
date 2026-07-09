@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getSupabase, setAuthPersistence } from '../lib/supabase'
 import { getBookingColumns, getBookingSchema } from '../lib/bookingsSchema'
+import { generateBusinessSlots } from '../lib/slots'
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 // Geração de comprovante PDF será carregada dinamicamente apenas quando necessário
 
@@ -1646,14 +1647,13 @@ function BookingsPanel({ barberId, onInitialHydrated }: { barberId: string | nul
                     }
                     const toHHmm = (m:number) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
                     const pickAvailableEODTime = async (targetDate:string): Promise<string> => {
-                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate).eq('barber_id', barberId ?? '')
+                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate)
                       const used = new Set<number>((data||[]).map((r:any)=> toMinutes(r[cols.timeCol])))
-                      // Tenta do 23:59 descendo até 20:00 (ou mais, se necessário)
-                      for (let m=23*60+59; m>=0; m--) {
+                      // Avulsos ficam sempre fora da grade operacional, no bloco 23:00-23:59.
+                      for (let m = 23 * 60 + 59; m >= 23 * 60; m--) {
                         if (!used.has(m)) return toHHmm(m)
                       }
-                      // fallback improvável
-                      return '23:59'
+                      throw new Error('Não há horário livre no bloco 23:00-23:59 para lançar este avulso nesta data.')
                     }
                     // Monta um registro marcado como concluído e AVULSO
                     const titles = sel.map(s=> s.title)
@@ -1661,7 +1661,7 @@ function BookingsPanel({ barberId, onInitialHydrated }: { barberId: string | nul
                     const minutes = sel.reduce((a,s)=> a + (s.minutes||0), 0)
                     const payload:any = { name: avulsoName.trim(), phone: null, service: `AVULSO: ${titles.join(', ')}`, price, duration_minutes: minutes, barber_id: barberId }
                     payload[cols.dateCol] = avulsoDate
-                    // horário EOD único para evitar violação de chave única
+                    // horário reservado fora da grade de trabalho para não confundir com atendimentos reais
                     payload[cols.timeCol] = await pickAvailableEODTime(avulsoDate)
                     // Preferir services_json quando existir
                     if (sch.servicesJsonCol) payload[sch.servicesJsonCol] = sel.map(s=> ({ id: s.id, title: s.title, price: s.price, minutes: s.minutes }))
@@ -1669,13 +1669,7 @@ function BookingsPanel({ barberId, onInitialHydrated }: { barberId: string | nul
                     if (sch.statusKind==='boolean' && sch.isCompletedCol) payload[sch.isCompletedCol] = true
                     if (sch.statusKind==='text' && sch.statusCol) payload[sch.statusCol] = 'avulso'
                     if (sch.completedAtCol) payload[sch.completedAtCol] = new Date().toISOString()
-                    let { error } = await supa.from('bookings').insert([payload])
-                    // Em caso de conflito (duplicidade), tenta mais uma vez com outro horário
-                    if (error && (error as any)?.code === '23505') {
-                      payload[cols.timeCol] = await pickAvailableEODTime(avulsoDate)
-                      const retry = await supa.from('bookings').insert([payload])
-                      error = retry.error as any
-                    }
+                    const { error } = await supa.from('bookings').insert([payload])
                     if (error) throw error
                     // Notificação de sucesso com detalhes
                     setAvulsoOpen(false)
