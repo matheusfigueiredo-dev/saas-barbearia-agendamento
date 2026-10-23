@@ -15,4 +15,5 @@ Mapeamento de campos:
 - bookings: { date, time, name, phone, service, price, duration_minutes }
 
 Observação:
-- A unicidade de (date, time) é garantida no banco via constraint, evitando double-book.
+- A unicidade é garantida no banco por `(date, time, barber_id)`, evitando double-book no mesmo profissional sem bloquear horários de outro barbeiro.
+- Se o banco ainda usa a constraint antiga `(date, time)`, execute `scripts/fix-bookings-unique-slot.sql` no SQL Editor do Supabase.

@@ -17,6 +17,11 @@ Siga estes passos no painel do Supabase para substituir o Firebase:
 3) Ative Realtime
 - Em Realtime, habilite as tabelas `public.bookings` e `public.services_catalog`.
 
+3.1) Corrija a unicidade dos agendamentos (multi-barbeiro)
+- No SQL Editor, execute `scripts/fix-bookings-unique-slot.sql`.
+- Ele troca a constraint global `(date, time)` por `(date, time, barber_id)`, permitindo que barbeiros diferentes atendam no mesmo horário.
+- O script é idempotente e não apaga agendamentos.
+
 4) Autenticação (barbeiro)
 - Em Authentication → Providers, mantenha Email habilitado.
 - Garanta que os dois usuários existentes no Auth estejam vinculados às linhas da tabela `barbers`.

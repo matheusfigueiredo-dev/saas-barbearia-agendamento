@@ -1647,7 +1647,7 @@ function BookingsPanel({ barberId, onInitialHydrated }: { barberId: string | nul
                     }
                     const toHHmm = (m:number) => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
                     const pickAvailableEODTime = async (targetDate:string): Promise<string> => {
-                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate)
+                      const { data } = await supa.from('bookings').select(cols.timeCol).eq(cols.dateCol, targetDate).eq('barber_id', barberId ?? '')
                       const used = new Set<number>((data||[]).map((r:any)=> toMinutes(r[cols.timeCol])))
                       // Avulsos ficam sempre fora da grade operacional, no bloco 23:00-23:59.
                       for (let m = 23 * 60 + 59; m >= 23 * 60; m--) {
